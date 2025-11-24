@@ -1,16 +1,44 @@
-# React + Vite
+# 間取り図カッパ
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+間取り図にコンセントや照明などの設備を配置できるエディター。
 
-Currently, two official plugins are available:
+## URL
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+https://madori-kappa.vercel.app/
 
-## React Compiler
+## 機能
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- 間取り図のアップロード
+- 設備アイコンの配置（コンセント、照明、スイッチ、TV端子、LAN、エアコン、洗濯機、冷蔵庫）
+- カスタム絵文字アイコンの配置
+- テキストの配置
+- 寸法線の描画（2点クリックで任意方向に対応）
+- 画像の余白設定
+- アイコンサイズの変更
+- ピンチズーム（トラックパッド対応）
+- データの自動保存（IndexedDB）
+- 編集した画像のダウンロード
 
-## Expanding the ESLint configuration
+## 使い方
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+1. 間取り図をアップロード
+2. ツールを選択
+3. 間取り図上をクリック（タップ）して配置
+4. 完成したら保存
+
+## 開発
+
+```bash
+# インストール
+npm install
+
+# 開発サーバー起動
+npm run dev
+
+# ビルド
+npm run build
+```
+
+## ライセンス
+
+MIT
