@@ -63,7 +63,7 @@ const FloorPlanEditor = () => {
   const [dimensionStart, setDimensionStart] = useState(null);
   const [isTouchDevice, setIsTouchDevice] = useState(false);
   const [padding, setPadding] = useState(0);
-  const [iconSize, setIconSize] = useState(24);
+  const [iconSize, setIconSize] = useState(32);
   const canvasRef = useRef(null);
   const fileInputRef = useRef(null);
 
@@ -423,10 +423,10 @@ const FloorPlanEditor = () => {
                 onChange={(e) => setIconSize(Number(e.target.value))}
                 className="px-2 py-1 border border-gray-300 rounded text-sm"
               >
-                <option value={16}>アイコン小</option>
-                <option value={24}>アイコン中</option>
-                <option value={32}>アイコン大</option>
-                <option value={48}>アイコン特大</option>
+                <option value={24}>アイコン小</option>
+                <option value={32}>アイコン中</option>
+                <option value={48}>アイコン大</option>
+                <option value={64}>アイコン特大</option>
               </select>
             </>
           )}
