@@ -1,14 +1,90 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Upload, Circle, Square, Type, Minus, Save, Trash2, Move } from 'lucide-react';
 
+const DB_NAME = 'floorplan-editor';
+const STORE_NAME = 'data';
+
+const openDB = () => {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, 1);
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result);
+    request.onupgradeneeded = (event) => {
+      const db = event.target.result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME);
+      }
+    };
+  });
+};
+
+const saveToDB = async (key, value) => {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    const store = tx.objectStore(STORE_NAME);
+    const request = store.put(value, key);
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve();
+  });
+};
+
+const loadFromDB = async (key) => {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readonly');
+    const store = tx.objectStore(STORE_NAME);
+    const request = store.get(key);
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result);
+  });
+};
+
+const clearDB = async () => {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    const store = tx.objectStore(STORE_NAME);
+    const request = store.clear();
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve();
+  });
+};
+
 const FloorPlanEditor = () => {
   const [image, setImage] = useState(null);
   const [elements, setElements] = useState([]);
+  const [isLoaded, setIsLoaded] = useState(false);
   const [selectedTool, setSelectedTool] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
   const [draggedElement, setDraggedElement] = useState(null);
+  const [touchTimeout, setTouchTimeout] = useState(null);
+  const [showLegend, setShowLegend] = useState(false);
+  const [dimensionStart, setDimensionStart] = useState(null);
+  const [isTouchDevice, setIsTouchDevice] = useState(false);
+  const [padding, setPadding] = useState(0);
+  const [iconSize, setIconSize] = useState(24);
   const canvasRef = useRef(null);
   const fileInputRef = useRef(null);
+
+  // Load from IndexedDB
+  useEffect(() => {
+    const load = async () => {
+      const savedImage = await loadFromDB('image');
+      const savedElements = await loadFromDB('elements');
+      if (savedImage) setImage(savedImage);
+      if (savedElements) setElements(savedElements);
+      setIsLoaded(true);
+    };
+    load();
+  }, []);
+
+  // Save to IndexedDB
+  useEffect(() => {
+    if (!isLoaded) return;
+    saveToDB('image', image);
+    saveToDB('elements', elements);
+  }, [image, elements, isLoaded]);
 
   const tools = [
     { id: 'outlet', label: 'コンセント', icon: '⚡', color: '#ef4444' },
@@ -21,6 +97,7 @@ const FloorPlanEditor = () => {
     { id: 'fridge', label: '冷蔵庫', icon: '🧊', color: '#6366f1' },
     { id: 'text', label: 'テキスト', icon: 'T', color: '#000000' },
     { id: 'dimension', label: '寸法線', icon: '↔', color: '#000000' },
+    { id: 'custom', label: 'カスタム', icon: '➕', color: '#6b7280' },
   ];
 
   const handleImageUpload = (e) => {
@@ -35,16 +112,68 @@ const FloorPlanEditor = () => {
     }
   };
 
-  const handleCanvasClick = (e) => {
-    if (!selectedTool || !image) return;
-
+  const getCanvasCoordinates = (e) => {
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+
+    // Support touch events
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+    const x = (clientX - rect.left) * scaleX;
+    const y = (clientY - rect.top) * scaleY;
+    return { x, y };
+  };
+
+  const handleTouchStart = (e) => {
+    // 2本指以上はスクロール用なのでスキップ
+    if (e.touches.length > 1) {
+      if (touchTimeout) {
+        clearTimeout(touchTimeout);
+        setTouchTimeout(null);
+      }
+      return;
+    }
+
+    setIsTouchDevice(true);
+
+    // 遅延を入れて2本指判定
+    const timeout = setTimeout(() => {
+      if (selectedTool && image) {
+        // 手動でクリック処理を呼び出す
+        const fakeEvent = { ...e, clientX: e.touches[0].clientX, clientY: e.touches[0].clientY };
+        handleCanvasClick(fakeEvent);
+      }
+      setTouchTimeout(null);
+    }, 100);
+    setTouchTimeout(timeout);
+  };
+
+  const handleTouchMove = (e) => {
+    // 2本指以上はスクロール用なのでスキップ
+    if (e.touches.length > 1) {
+      if (touchTimeout) {
+        clearTimeout(touchTimeout);
+        setTouchTimeout(null);
+      }
+      return;
+    }
+    e.preventDefault();
+    handleMouseMove(e);
+  };
+
+  const handleCanvasClick = (e) => {
+    // タッチデバイスの場合、clickイベントは無視（touchstartで処理済み）
+    if (isTouchDevice && e.type === 'click') return;
+
+    if (!selectedTool || !image) return;
+
+    const { x, y } = getCanvasCoordinates(e);
 
     if (selectedTool === 'text') {
-      const text = prompt('テキストを入力してください:');
+      const text = window.prompt('テキストを入力してください:');
       if (text) {
         setElements([...elements, {
           type: 'text',
@@ -55,14 +184,35 @@ const FloorPlanEditor = () => {
         }]);
       }
     } else if (selectedTool === 'dimension') {
-      const length = prompt('寸法(cm)を入力してください:');
-      if (length) {
+      if (!dimensionStart) {
+        // 1点目
+        setDimensionStart({ x, y });
+      } else {
+        // 2点目
+        const length = window.prompt('寸法(cm)を入力してください:');
+        if (length) {
+          setElements([...elements, {
+            type: 'dimension',
+            x: dimensionStart.x,
+            y: dimensionStart.y,
+            x2: x,
+            y2: y,
+            length,
+            color: '#000000'
+          }]);
+        }
+        setDimensionStart(null);
+      }
+    } else if (selectedTool === 'custom') {
+      const emoji = window.prompt('絵文字を入力してください:');
+      if (emoji) {
         setElements([...elements, {
-          type: 'dimension',
+          type: 'custom',
           x,
           y,
-          length,
-          color: '#000000'
+          icon: emoji,
+          color: '#6b7280',
+          label: emoji
         }]);
       }
     } else {
@@ -86,10 +236,7 @@ const FloorPlanEditor = () => {
   const handleMouseMove = (e) => {
     if (!isDragging || draggedElement === null) return;
 
-    const canvas = canvasRef.current;
-    const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const { x, y } = getCanvasCoordinates(e);
 
     const newElements = [...elements];
     newElements[draggedElement] = {
@@ -125,9 +272,11 @@ const FloorPlanEditor = () => {
     const img = new Image();
 
     img.onload = () => {
-      canvas.width = img.width;
-      canvas.height = img.height;
-      ctx.drawImage(img, 0, 0);
+      canvas.width = img.width + padding * 2;
+      canvas.height = img.height + padding * 2;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, padding, padding);
 
       // Draw all elements
       elements.forEach((element) => {
@@ -138,35 +287,59 @@ const FloorPlanEditor = () => {
           ctx.fillStyle = element.color;
           ctx.fillText(element.text, element.x, element.y);
         } else if (element.type === 'dimension') {
+          const x1 = element.x;
+          const y1 = element.y;
+          const x2 = element.x2 ?? element.x + 100;
+          const y2 = element.y2 ?? element.y;
+
           ctx.strokeStyle = element.color;
           ctx.lineWidth = 2;
+
+          // Main line
           ctx.beginPath();
-          ctx.moveTo(element.x, element.y);
-          ctx.lineTo(element.x + 100, element.y);
+          ctx.moveTo(x1, y1);
+          ctx.lineTo(x2, y2);
           ctx.stroke();
 
-          // Arrows
-          ctx.beginPath();
-          ctx.moveTo(element.x, element.y - 5);
-          ctx.lineTo(element.x, element.y + 5);
-          ctx.stroke();
-          ctx.beginPath();
-          ctx.moveTo(element.x + 100, element.y - 5);
-          ctx.lineTo(element.x + 100, element.y + 5);
-          ctx.stroke();
+          // Calculate perpendicular direction for end markers
+          const dx = x2 - x1;
+          const dy = y2 - y1;
+          const len = Math.sqrt(dx * dx + dy * dy);
 
-          // Text
-          ctx.font = '14px sans-serif';
-          ctx.fillStyle = element.color;
-          ctx.fillText(element.length + 'cm', element.x + 30, element.y - 10);
+          if (len > 0) {
+            const nx = -dy / len * 8;
+            const ny = dx / len * 8;
+
+            // End markers
+            ctx.beginPath();
+            ctx.moveTo(x1 + nx, y1 + ny);
+            ctx.lineTo(x1 - nx, y1 - ny);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(x2 + nx, y2 + ny);
+            ctx.lineTo(x2 - nx, y2 - ny);
+            ctx.stroke();
+
+            // Text at midpoint
+            const midX = (x1 + x2) / 2;
+            const midY = (y1 + y2) / 2;
+            ctx.font = 'bold 20px sans-serif';
+            ctx.fillStyle = element.color;
+            ctx.fillText(element.length + 'cm', midX + nx * 1.5, midY + ny * 1.5 - 5);
+          } else {
+            // Fallback for zero-length
+            ctx.font = 'bold 20px sans-serif';
+            ctx.fillStyle = element.color;
+            ctx.fillText(element.length + 'cm', x1, y1 - 10);
+          }
         } else {
           // Icon
-          ctx.font = '24px sans-serif';
-          ctx.fillText(element.icon, element.x - 12, element.y + 8);
+          ctx.font = `${iconSize}px sans-serif`;
+          ctx.fillText(element.icon, element.x - iconSize / 2, element.y + iconSize / 3);
 
           // Circle background
           ctx.beginPath();
-          ctx.arc(element.x, element.y, 20, 0, Math.PI * 2);
+          ctx.arc(element.x, element.y, iconSize * 0.8, 0, Math.PI * 2);
           ctx.strokeStyle = element.color;
           ctx.lineWidth = 2;
           ctx.stroke();
@@ -174,19 +347,29 @@ const FloorPlanEditor = () => {
 
         ctx.restore();
       });
+
+      // Draw dimension start point marker
+      if (dimensionStart) {
+        ctx.save();
+        ctx.fillStyle = '#3b82f6';
+        ctx.beginPath();
+        ctx.arc(dimensionStart.x, dimensionStart.y, 6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
     };
 
     img.src = image;
-  }, [image, elements]);
+  }, [image, elements, dimensionStart, padding, iconSize]);
 
   return (
     <div className="w-full h-screen bg-gray-50 flex flex-col">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 p-4">
-        <h1 className="text-2xl font-bold text-gray-800 mb-4">間取り図エディター</h1>
+      <div className="bg-white border-b border-gray-200 p-3 sm:p-4">
+        <h1 className="text-xl sm:text-2xl font-bold text-gray-800 mb-3 sm:mb-4">間取り図エディター</h1>
 
         {/* Upload Button */}
-        <div className="flex items-center gap-4 mb-4">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
           <input
             ref={fileInputRef}
             type="file"
@@ -196,28 +379,55 @@ const FloorPlanEditor = () => {
           />
           <button
             onClick={() => fileInputRef.current.click()}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            className="flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm sm:text-base"
           >
-            <Upload size={20} />
-            間取り図をアップロード
+            <Upload size={18} className="sm:w-5 sm:h-5" />
+            <span className="hidden sm:inline">間取り図を</span>アップロード
           </button>
 
           {image && (
             <>
               <button
                 onClick={saveImage}
-                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                className="flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm sm:text-base"
               >
-                <Save size={20} />
+                <Save size={18} className="sm:w-5 sm:h-5" />
                 保存
               </button>
               <button
-                onClick={() => setElements([])}
-                className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+                onClick={async () => {
+                  if (window.confirm('画像と配置した設備をすべて削除しますか？')) {
+                    setImage(null);
+                    setElements([]);
+                    await clearDB();
+                    localStorage.removeItem('floorplan-editor-data');
+                  }
+                }}
+                className="flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm sm:text-base"
               >
-                <Trash2 size={20} />
-                全削除
+                <Trash2 size={18} className="sm:w-5 sm:h-5" />
+                <span className="hidden sm:inline">全</span>削除
               </button>
+              <select
+                value={padding}
+                onChange={(e) => setPadding(Number(e.target.value))}
+                className="px-2 py-1 border border-gray-300 rounded text-sm"
+              >
+                <option value={0}>余白なし</option>
+                <option value={50}>余白 50px</option>
+                <option value={100}>余白 100px</option>
+                <option value={200}>余白 200px</option>
+              </select>
+              <select
+                value={iconSize}
+                onChange={(e) => setIconSize(Number(e.target.value))}
+                className="px-2 py-1 border border-gray-300 rounded text-sm"
+              >
+                <option value={16}>アイコン小</option>
+                <option value={24}>アイコン中</option>
+                <option value={32}>アイコン大</option>
+                <option value={48}>アイコン特大</option>
+              </select>
             </>
           )}
         </div>
@@ -228,8 +438,11 @@ const FloorPlanEditor = () => {
             {tools.map((tool) => (
               <button
                 key={tool.id}
-                onClick={() => setSelectedTool(tool.id)}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg border-2 transition-all ${
+                onClick={() => {
+                  setSelectedTool(tool.id);
+                  setDimensionStart(null);
+                }}
+                className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border-2 transition-all ${
                   selectedTool === tool.id
                     ? 'border-blue-600 bg-blue-50'
                     : 'border-gray-300 bg-white hover:border-gray-400'
@@ -238,8 +451,8 @@ const FloorPlanEditor = () => {
                   borderColor: selectedTool === tool.id ? tool.color : undefined
                 }}
               >
-                <span className="text-xl">{tool.icon}</span>
-                <span className="text-sm font-medium">{tool.label}</span>
+                <span className="text-lg sm:text-xl">{tool.icon}</span>
+                <span className="text-xs sm:text-sm font-medium">{tool.label}</span>
               </button>
             ))}
           </div>
@@ -247,7 +460,7 @@ const FloorPlanEditor = () => {
       </div>
 
       {/* Canvas Area */}
-      <div className="flex-1 overflow-auto p-8 bg-gray-100">
+      <div className="flex-1 overflow-auto p-4 sm:p-8 bg-gray-100">
         {!image ? (
           <div className="h-full flex items-center justify-center">
             <div className="text-center text-gray-500">
@@ -263,6 +476,9 @@ const FloorPlanEditor = () => {
               onMouseMove={handleMouseMove}
               onMouseUp={handleMouseUp}
               onMouseLeave={handleMouseUp}
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleMouseUp}
               className="cursor-crosshair"
               style={{ maxWidth: '100%', height: 'auto' }}
             />
@@ -272,36 +488,51 @@ const FloorPlanEditor = () => {
 
       {/* Legend */}
       {elements.length > 0 && (
-        <div className="bg-white border-t border-gray-200 p-4">
-          <h3 className="font-semibold mb-2">配置した設備 ({elements.length})</h3>
-          <div className="flex flex-wrap gap-2">
-            {elements.map((element, index) => (
-              <div
-                key={index}
-                className="flex items-center gap-2 px-3 py-1 bg-gray-100 rounded-full text-sm"
-              >
-                <span>{element.icon || '📝'}</span>
-                <span>{element.label || element.type}</span>
-                <button
-                  onClick={() => deleteElement(index)}
-                  className="text-red-600 hover:text-red-800"
-                >
-                  ×
-                </button>
+        <div className="bg-white border-t border-gray-200">
+          <button
+            onClick={() => setShowLegend(!showLegend)}
+            className="w-full p-2 sm:p-3 flex items-center justify-between hover:bg-gray-50"
+          >
+            <h3 className="font-semibold text-sm sm:text-base">配置した設備 ({elements.length})</h3>
+            <span className="text-gray-500">{showLegend ? '▼' : '▲'}</span>
+          </button>
+          {showLegend && (
+            <div className="px-3 pb-3 max-h-32 overflow-y-auto">
+              <div className="flex flex-wrap gap-2">
+                {elements.map((element, index) => (
+                  <div
+                    key={index}
+                    className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1 bg-gray-100 rounded-full text-xs sm:text-sm"
+                  >
+                    <span>{element.icon || '📝'}</span>
+                    <span>{element.label || element.type}</span>
+                    <button
+                      onClick={() => deleteElement(index)}
+                      className="text-red-600 hover:text-red-800"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            </div>
+          )}
         </div>
       )}
 
       {/* Instructions */}
-      <div className="bg-blue-50 border-t border-blue-200 p-3 text-sm text-blue-800">
+      <div className="bg-blue-50 border-t border-blue-200 p-2 sm:p-3 text-xs sm:text-sm text-blue-800">
         <p>
           <strong>使い方:</strong>
-          ① 間取り図をアップロード →
-          ② ツールを選択 →
-          ③ 間取り図上をクリックして配置 →
-          ④ 完成したら保存
+          <span className="hidden sm:inline">
+            ① 間取り図をアップロード →
+            ② ツールを選択 →
+            ③ 間取り図上をクリックして配置 →
+            ④ 完成したら保存
+          </span>
+          <span className="sm:hidden">
+            ① アップロード → ② ツール選択 → ③ タップで配置 → ④ 保存
+          </span>
         </p>
       </div>
     </div>
