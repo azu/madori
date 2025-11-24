@@ -376,7 +376,7 @@ const FloorPlanEditor = () => {
     <div className="w-full h-screen bg-gray-50 flex flex-col">
       {/* Header */}
       <div className="bg-white border-b border-gray-200 p-3 sm:p-4">
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-800 mb-3 sm:mb-4">間取り図エディター</h1>
+        <h1 className="text-xl sm:text-2xl font-bold text-gray-800 mb-3 sm:mb-4">間取り図カッパ</h1>
 
         {/* Upload Button */}
         <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
