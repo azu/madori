@@ -416,7 +416,7 @@ const FloorPlanEditor = () => {
                 className="flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm sm:text-base"
               >
                 <Trash2 size={18} className="sm:w-5 sm:h-5" />
-                <span className="hidden sm:inline">全</span>削除
+                削除
               </button>
               <select
                 value={padding}
