@@ -392,7 +392,7 @@ const FloorPlanEditor = () => {
             className="flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm sm:text-base"
           >
             <Upload size={18} className="sm:w-5 sm:h-5" />
-            <span className="hidden sm:inline">間取り図を</span>アップロード
+            <span className="hidden sm:inline">間取り図を</span><span>アップロード</span>
           </button>
 
           {image && (
