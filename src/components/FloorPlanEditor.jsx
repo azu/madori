@@ -64,6 +64,7 @@ const FloorPlanEditor = () => {
   const [isTouchDevice, setIsTouchDevice] = useState(false);
   const [padding, setPadding] = useState(0);
   const [iconSize, setIconSize] = useState(32);
+  const [zoom, setZoom] = useState(1);
   const canvasRef = useRef(null);
   const fileInputRef = useRef(null);
 
@@ -162,6 +163,15 @@ const FloorPlanEditor = () => {
     }
     e.preventDefault();
     handleMouseMove(e);
+  };
+
+  const handleWheel = (e) => {
+    // Pinch zoom on trackpad (ctrlKey is true for pinch gestures)
+    if (e.ctrlKey) {
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? 0.9 : 1.1;
+      setZoom(z => Math.min(Math.max(0.25, z * delta), 4));
+    }
   };
 
   const handleCanvasClick = (e) => {
@@ -469,7 +479,7 @@ const FloorPlanEditor = () => {
             </div>
           </div>
         ) : (
-          <div className="bg-white shadow-lg inline-block">
+          <div className="bg-gray-300 shadow-lg inline-block">
             <canvas
               ref={canvasRef}
               onClick={handleCanvasClick}
@@ -479,8 +489,9 @@ const FloorPlanEditor = () => {
               onTouchStart={handleTouchStart}
               onTouchMove={handleTouchMove}
               onTouchEnd={handleMouseUp}
+              onWheel={handleWheel}
               className="cursor-crosshair"
-              style={{ maxWidth: '100%', height: 'auto' }}
+              style={{ maxWidth: '100%', height: 'auto', transform: `scale(${zoom})`, transformOrigin: 'top left' }}
             />
           </div>
         )}
