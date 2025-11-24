@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Upload, Circle, Square, Type, Minus, Save, Trash2, Move } from 'lucide-react';
+import { Upload, Circle, Square, Type, Minus, Save, Trash2, Move, Github } from 'lucide-react';
 
 const DB_NAME = 'floorplan-editor';
 const STORE_NAME = 'data';
@@ -376,7 +376,18 @@ const FloorPlanEditor = () => {
     <div className="w-full h-screen bg-gray-50 flex flex-col">
       {/* Header */}
       <div className="bg-white border-b border-gray-200 p-3 sm:p-4">
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-800 mb-3 sm:mb-4">間取り図カッパ</h1>
+        <div className="flex items-center gap-3 mb-3 sm:mb-4">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-800">間取り図カッパ</h1>
+          <a
+            href="https://github.com/azu/madori"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-gray-400 hover:text-gray-600"
+            title="Source Code"
+          >
+            <Github size={20} />
+          </a>
+        </div>
 
         {/* Upload Button */}
         <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
@@ -546,6 +557,7 @@ const FloorPlanEditor = () => {
           </span>
         </p>
       </div>
+
     </div>
   );
 };
